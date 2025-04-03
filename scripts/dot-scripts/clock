@@ -1,0 +1,4 @@
+echo "Unix:    $(date +%s)"
+echo "UTC:     $(TZ=UTC date)"
+echo "Eastern: $(TZ=US/Eastern date)"
+echo "Pacific: $(TZ=US/Pacific date)"

@@ -1,0 +1,67 @@
+# Homebrew Bundle File
+#
+# This is a Brewfile - used by Homebrew Bundle to install and manage packages,
+# applications, and other dependencies in a single, declarative file.
+#
+# Usage:
+# - Install everything: brew bundle
+# - Check for missing packages: brew bundle check
+# - List what would be installed: brew bundle list
+#
+# File structure:
+# - brew: CLI tools and packages from Homebrew
+# - mas: Mac App Store applications installed via 'mas' CLI
+# - cask: Applications not available in App Store, installed via Homebrew Cask
+#
+# For more information: https://github.com/Homebrew/homebrew-bundle
+
+## Utilities/Tools ##
+
+brew "circleci"
+brew "heroku"
+brew "jq"
+brew "mas"
+brew "postgresql"
+brew "pyenv"
+brew "rbenv"
+brew "rbenv-gemset"
+brew "stow" # Installed via Makefile, listed for completeness
+brew "tree"
+brew "xq"
+
+# Safari Extensions
+mas "1Password for Safari", id: 1569813296
+mas "Privacy for Safari", id: 6449850851
+mas "Save to Reader", id: 1640236961
+mas "SocialFocus: Hide Distractions", id: 1661093205
+mas "Supercopy for Safari", id: 6477720316
+mas "UnTrap for YouTube", id: 1637438059
+
+# App Store
+mas "Amphetamine", id: 937984704
+mas "Gifski", id: 1351639930
+mas "Sofa: Downtime Organizer", id: 1276554886
+mas "Soulver 3", id: 1508732804
+mas "Supernote Partner", id: 1494992020
+mas "Things 3", id: 904280696
+
+# !App Store
+cask "1password-cli"
+cask "alfred"
+cask "crashplan"
+cask "devonthink"
+cask "docker"
+# cask "emacs"
+cask "google-chrome"
+cask "google-cloud-sdk"
+cask "iterm2"
+cask "jetbrains-toolbox"
+cask "jordanbaird-ice"
+cask "ngrok"
+cask "notion"
+cask "rectangle"
+cask "slack"
+cask "spotify"
+cask "timing"
+cask "tuple"
+cask "zoom"

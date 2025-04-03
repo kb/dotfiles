@@ -1,0 +1,2 @@
+gcloud config configurations activate digits-hiring
+gcloud container clusters get-credentials digits-hiring --region us-central1-a

@@ -1,0 +1,20 @@
+[user]
+	name = Kyle Bolton
+	signingkey = ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEe45qd47YevQDtuLZr20lwIRi9eDknMBmB25heasy8+
+[gpg]
+	format = ssh
+[gpg "ssh"]
+	program = /Applications/1Password.app/Contents/MacOS/op-ssh-sign
+[commit]
+	gpgsign = true
+[filter "lfs"]
+	clean = git-lfs clean -- %f
+	smudge = git-lfs smudge -- %f
+	process = git-lfs filter-process
+	required = true
+[github]
+	user = kb
+[pull]
+	rebase = false
+[init]
+	defaultBranch = main

@@ -1,0 +1,2 @@
+gcloud config configurations activate digits-production
+gcloud container clusters get-credentials digits-shared-us-central1 --region us-central1

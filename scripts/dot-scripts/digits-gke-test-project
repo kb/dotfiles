@@ -1,0 +1,2 @@
+gcloud config configurations activate digits-test
+gcloud container clusters get-credentials digits-test-shared-us-central1 --region us-central1
