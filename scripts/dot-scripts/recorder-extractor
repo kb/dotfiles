@@ -1,0 +1,49 @@
+#!/bin/bash
+
+# ================================================================
+# Connect Recorder Response Extractor
+# ================================================================
+#
+# DESCRIPTION:
+#   This script extracts the raw body of a specific response from a JSON file
+#   containing event recordings. It allows you to specify which response to
+#   extract by its index in the responses array.
+#
+# USAGE:
+#   ./recorder-extractor <file_path> [response_index]
+#
+# ARGUMENTS:
+#   file_path       - Path to the JSON file containing event recordings
+#   response_index  - (Optional) Index of the response to extract from the responses array
+#                     Can be positive (0, 1, 2, etc.) or negative (-1 for last item)
+#                     Default: -1 (last response)
+#
+# EXAMPLES:
+#   ./recorder-extractor event-recording.json       # Extract the last response
+#   ./recorder-extractor event-recording.json 0     # Extract the first response
+#   ./recorder-extractor event-recording.json -2    # Extract the second-to-last response
+#
+# OUTPUT:
+#   The script outputs the formatted contents of the specified response's rawBody field.
+#
+# NOTES:
+#   - Requires jq to be installed on your system
+#   - The script expects JSON in a specific format with readConnectRecording.responses[].rawBody
+# ================================================================
+
+# Check if correct number of arguments is provided
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
+    echo "Usage: $0 <file_path> [response_index]"
+    echo "Example: $0 my-file.json -1"
+    exit 1
+fi
+
+# Assign arguments to variables
+FILE_PATH=$1
+# Default to last element if no index is provided
+RESPONSE_INDEX=${2:--1}
+
+# Execute the jq command with the provided arguments
+cat $FILE_PATH | jq ".readConnectRecording.responses[$RESPONSE_INDEX].rawBody|fromjson"
+
+echo "Processed file: $FILE_PATH, response index: $RESPONSE_INDEX"
