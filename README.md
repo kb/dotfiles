@@ -18,7 +18,8 @@ This dotfiles repository is organized by application or tool, with each director
 ## Installation
 
 1. Install and configure Prerequisites
-    1. Password
+    1. Run `xcode-select --install` from terminal
+    1. Install [1Password](https://1password.com/downloads/mac)
     1. Set ENV VAR for 1Password service account 
 
    ```bash
