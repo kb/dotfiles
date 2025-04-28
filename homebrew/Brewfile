@@ -45,6 +45,9 @@ mas "Soulver 3", id: 1508732804
 mas "Supernote Partner", id: 1494992020
 mas "Things 3", id: 904280696
 
+# TODO this works but adding a cask "mouseless" below does not
+# brew install --cask mouseless
+
 # !App Store
 cask "1password-cli"
 cask "alfred"
@@ -54,6 +57,8 @@ cask "docker"
 # cask "emacs"
 cask "google-chrome"
 cask "google-cloud-sdk"
+cask "granola"
+cask "homerow"
 cask "iterm2"
 cask "jetbrains-toolbox"
 cask "jordanbaird-ice"
