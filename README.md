@@ -45,6 +45,7 @@ This will:
 ## Post Installation
 
 1. Update Alfred to point to iCloud folder location so preferences are sync'd
+1. Setup DEVONThink iCloud (CloudKit) sync
 
 ### Manual Installation
 
