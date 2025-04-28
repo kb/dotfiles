@@ -42,6 +42,10 @@ This will:
 - Install Oh My Zsh
 - Set some macOS preferences
 
+## Post Installation
+
+1. Update Alfred to point to iCloud folder location so preferences are sync'd
+
 ### Manual Installation
 
 If you prefer to install components individually:
