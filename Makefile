@@ -66,6 +66,14 @@ hide-dock:
 	@defaults write com.apple.dock autohide -bool true
 	@killall Dock
 
+# TODO this doesn't seem to work
 remap-caps-to-ctrl:
 	@echo "Remapping Caps Lock to Control key"
 	@hidutil property --set '{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000039,"HIDKeyboardModifierMappingDst":0x7000000E0}]}'
+
+# TODO list of things to automate if possible
+# - key repeat be set via command
+# - "show spotlight search" keymap be disabled via command
+# - keyboard navigation be enabled via command
+# - ice menu bar manager settings
+
