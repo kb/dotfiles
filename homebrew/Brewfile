@@ -28,6 +28,8 @@ brew "rbenv-gemset"
 brew "stow" # Installed via Makefile, listed for completeness
 brew "tree"
 brew "xq"
+brew "git"
+brew "git-lfs"
 
 # Safari Extensions
 mas "1Password for Safari", id: 1569813296
