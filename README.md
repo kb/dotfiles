@@ -20,15 +20,18 @@ This dotfiles repository is organized by application or tool, with each director
 1. Install and configure Prerequisites
     1. Run `xcode-select --install` from terminal
     1. Install [1Password](https://1password.com/downloads/mac)
-    1. Set ENV VAR for 1Password service account 
-
-   ```bash
-   security add-generic-password -U -a ${USER} -D "environment variable" -s "${1}" -w "${secret}"
-   ```
 
 1. Copy/Download this repository to your new computer (assuming you don't have git functionality yet)
 
-1. Run the setup script:
+1. Manually source `scripts/dot-scripts/keychain-environment-variables`
+
+1. Run set-keychain-environment-variable to set 1PW service account token in keychain
+
+```bash
+set-keychain-environment-variable 1PW_SERVICE_ACCOUNT_TOKEN
+```
+
+1. Run the setup script
 
 ```bash
 make setup

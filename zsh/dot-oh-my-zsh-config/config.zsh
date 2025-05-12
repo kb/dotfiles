@@ -30,7 +30,7 @@ source keychain-environment-variables
 # $  set-keychain-environment-variable AWS_SECRET_ACCESS_KEY
 #       provide: "j1/yoursupersecret/password"
 # 1password service account token to access dotfiles vault
-export OP_SERVICE_ACCOUNT_TOKEN=$(keychain-environment-variable OP_SERVICE_ACCOUNT_TOKEN);
+export OP_SERVICE_ACCOUNT_TOKEN=$(keychain-environment-variable 1PW_SERVICE_ACCOUNT_TOKEN);
 
 export SECRETS_DIR="${ZSH_CUSTOM}/secrets"
 ##### Dotfiles secrets management start #####
