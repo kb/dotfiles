@@ -12,6 +12,7 @@
 path+=("${HOME}/.scripts")
 path+=("${HOME}/.rbenv/bin")
 path+=("${HOME}/go/bin")
+path+=("${HOME}/Library/Python/3.9/bin")
 path+=("${DIGITS_REPO_PATH}/development/bin")
 
 # Digits specific env vars
