@@ -9,15 +9,24 @@
 # cd $brainstormr
 
 # Get path setup before attempting to run executables
+path+=("/opt/homebrew/opt/postgresql@17/bin")
 path+=("${HOME}/.scripts")
 path+=("${HOME}/.rbenv/bin")
 path+=("${HOME}/go/bin")
 path+=("${HOME}/Library/Python/3.9/bin")
-path+=("${DIGITS_REPO_PATH}/development/bin")
 
-# Digits specific env vars
-export DIGITS_REPO_PATH="${HOME}/Developer"
+### Digits ###
 export GCP_ACCOUNT_EMAIL="kyle@digits.com"
+
+# Always have make for core repo run view gen
+export MAKE_AIB=true+
+
+# Digits development tools
+export PATH="/Users/kyle/digits/core/development/bin:$PATH"
+source "/Users/kyle/digits/core/development/bin/dm-completions.zsh"
+source "/Users/kyle/digits/core/development/bin/cook-completions.zsh"
+
+### General ###
 
 # make brew available
 eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -39,20 +48,20 @@ export SECRETS_DIR="${ZSH_CUSTOM}/secrets"
 secrets_out_path="${SECRETS_DIR}/secrets-out.zsh"
 
 if [ ! -f "$secrets_out_path" ]; then
-    # Only show message when file doesn't exist
-    echo "Creating ${secrets_out_path}..."
-    op inject --in-file "${SECRETS_DIR}/secrets-in.zsh" --out-file "$secrets_out_path"
+	# Only show message when file doesn't exist
+	echo "Creating ${secrets_out_path}..."
+	op inject --in-file "${SECRETS_DIR}/secrets-in.zsh" --out-file "$secrets_out_path"
 else
-    # Check if secrets need updating, but do so silently
-    secrets_in_no_values=$(cat "${SECRETS_DIR}/secrets-in.zsh" | sed 's/=.*//' | base64)
-    secrets_out_no_values=$(cat "$secrets_out_path" | sed 's/=.*//' | base64)
+	# Check if secrets need updating, but do so silently
+	secrets_in_no_values=$(cat "${SECRETS_DIR}/secrets-in.zsh" | sed 's/=.*//' | base64)
+	secrets_out_no_values=$(cat "$secrets_out_path" | sed 's/=.*//' | base64)
 
-    if [ ! "$secrets_in_no_values" = "$secrets_out_no_values" ]; then
-        # Only show message when update is needed
-        echo "Secrets have changed... Updating ${secrets_out_path}"
-        rm "$secrets_out_path"
-        op inject --in-file "${SECRETS_DIR}/secrets-in.zsh" --out-file "$secrets_out_path"
-    fi
+	if [ ! "$secrets_in_no_values" = "$secrets_out_no_values" ]; then
+		# Only show message when update is needed
+		echo "Secrets have changed... Updating ${secrets_out_path}"
+		rm "$secrets_out_path"
+		op inject --in-file "${SECRETS_DIR}/secrets-in.zsh" --out-file "$secrets_out_path"
+	fi
 fi
 
 source "$secrets_out_path"
