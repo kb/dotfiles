@@ -332,6 +332,9 @@ for ESLint."
   (when (display-graphic-p)
     (context-menu-mode))
 
+  ;; Fix archaic defaults
+  (setopt sentence-end-double-space nil)
+
   ;; Save manual customizations to other file than init.el
   (setq custom-file (locate-user-emacs-file "custom-vars.el"))
   (load custom-file 'noerror 'nomessage)
