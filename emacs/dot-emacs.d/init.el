@@ -328,6 +328,10 @@ for ESLint."
   ;; Move through windows with Shift-<arrow keys>
   (windmove-default-keybindings 'shift)
 
+  ;; Make right-click do something sensible
+  (when (display-graphic-p)
+    (context-menu-mode))
+
   ;; Save manual customizations to other file than init.el
   (setq custom-file (locate-user-emacs-file "custom-vars.el"))
   (load custom-file 'noerror 'nomessage)
