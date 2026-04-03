@@ -2608,11 +2608,13 @@ As seen on: https://emacs.dyerdwelling.family/emacs/20250604085817-emacs--buildi
   :ensure nil
   :defer t
   :mode ("\\.org\\'" . org-mode)
+  :hook (org-mode . visual-line-mode)
   :config
   (setopt org-export-backends '(ascii html icalendar latex odt md))
   (setq
-   ;; Start collapsed for speed
+   ;; Start collapsed and indented
    org-startup-folded t
+   org-startup-indented t
 
    ;; Edit settings
    org-hide-leading-stars t
