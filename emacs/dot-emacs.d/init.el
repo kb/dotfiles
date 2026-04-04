@@ -852,11 +852,6 @@ If ###@### is found, remove it and place point there at the end."
       (window-width . 100)
       (side . right)
       (slot . 1))
-     ("\\*claude:.*\\*"
-      (display-buffer-in-side-window)
-      (window-width . 100)
-      (side . right)
-      (slot . 1))
      ("\\*\\(Flymake diagnostics\\|Completions\\)"
       (display-buffer-in-side-window)
       (window-height . 0.25)
@@ -1479,6 +1474,11 @@ Ex: mpv file1 file2 file3 file4..."
   :config
   (setq wdired-allow-to-change-permissions t)
   (setq wdired-create-parent-directories t))
+
+
+;;; │ EAT
+(use-package eat
+  :ensure t)
 
 
 ;;; │ ESHELL

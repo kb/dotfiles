@@ -9,7 +9,7 @@
 ;;; Commentary:
 ;;
 ;; Provides interactive functions to launch AI chat sessions
-;; (Ollama, Gemini, Claude) inside `ansi-term' buffers.  Supports
+;; (Ollama, Gemini, Claude) inside `eat' buffers.  Supports
 ;; sending selected regions as context.
 
 ;;; Code:
@@ -18,10 +18,11 @@
   :ensure nil
   :no-require t
   :defer t
+  :after eat
   :init
   (defun emacs-kit/ollama-run-model ()
     "Run `ollama list`, let the user choose a model.
-And open it in `ansi-term`.
+And open it in `eat'.
 If a region is selected, use it as a query.
 If a prompt is provided, it's prepended."
     (interactive)
@@ -34,18 +35,22 @@ If a prompt is provided, it's prepended."
                                                           (region-end))))
            (prompt (read-string "Ollama Prompt (optional): " nil nil nil)))
       (when (and selected (not (string-empty-p selected)))
-        (ansi-term "/bin/sh")
-        (sit-for 1)
         (let* ((body (string-join (delq nil (list prompt region-text)) "\n"))
                (escaped-body (replace-regexp-in-string "\"" "\\\\\"" body))
-               (command (format "printf \"%s\" | ollama run %s" escaped-body selected)))
-          (term-send-raw-string command)
-          (term-send-raw-string "\n")))))
+               (command (format "printf \"%s\" | ollama run %s" escaped-body selected))
+               (buf (eat-make (generate-new-buffer-name "ollama") "/bin/sh" nil)))
+          (pop-to-buffer buf)
+          (run-at-time 0.5 nil
+                       (lambda (b cmd)
+                         (when (buffer-live-p b)
+                           (with-current-buffer b
+                             (eat-term-send-string eat-terminal cmd)
+                             (eat-term-send-string eat-terminal "\n"))))
+                       buf command)))))
 
 
   (defun emacs-kit/gemini-chat ()
-    "Start a new interactive `gemini` session in an `ansi-term` buffer.
-This provides better rendering for the CLI's rich text user interface."
+    "Start a new interactive `gemini` session in an `eat' buffer."
     (interactive)
     (let* ((default-directory (or (vc-root-dir)
                                   (and emacs-kit-ai-scratch-path
@@ -55,31 +60,17 @@ This provides better rendering for the CLI's rich text user interface."
            (buffer-name (generate-new-buffer-name
                          (format "gemini-chat:%s"
                                  (file-name-nondirectory (directory-file-name default-directory))))))
-      (let ((proc-buffer (ansi-term "gemini" buffer-name)))
-        (with-current-buffer proc-buffer
-          (pop-to-buffer proc-buffer)
+      (let ((buf (eat-make buffer-name "gemini" nil)))
+        (pop-to-buffer buf)
+        (with-current-buffer buf
           (setq-local column-number-mode nil)))))
 
   (defun emacs-kit/claude-chat ()
-    "Start or reuse an interactive `claude' session in an `ansi-term' buffer.
+    "Start or reuse an interactive `claude' session in an `eat' buffer.
   If a region is active, prompt for a query and send the region text
   along with the query to Claude. If a claude buffer for the current
   project already exists with a live process, reuse it. Otherwise,
-  start a new session.
-
-  In order to Emacs best behave using the built-in `ansi-term', edit
-  `~/.claude/settings.json' and add these to the json:
-
-  {
-  ...
-    \"prefersReducedMotion\": true,
-    \"spinnerVerbs\": {
-      \"mode\": \"replace\",
-      \"verbs\": [\"Processing\"]
-    }
-  ...
-  }
-"
+  start a new session."
     (interactive)
     (let* ((source-file (buffer-file-name))
            (project-root (vc-root-dir))
@@ -105,8 +96,8 @@ This provides better rendering for the CLI's rich text user interface."
                             file-prefix)))
            (base-name (format "claude:%s"
                               (file-name-nondirectory (directory-file-name default-directory))))
-           (term-buffer-name (format "*%s*" base-name))
-           (existing-buffer (get-buffer term-buffer-name)))
+           (eat-buffer-name (format "*%s*" base-name))
+           (existing-buffer (get-buffer eat-buffer-name)))
       (if (and existing-buffer
                (buffer-live-p existing-buffer)
                (get-buffer-process existing-buffer))
@@ -114,42 +105,29 @@ This provides better rendering for the CLI's rich text user interface."
           (progn
             (pop-to-buffer existing-buffer)
             (when initial-input
-              (let ((proc (get-buffer-process existing-buffer)))
-                (term-send-string proc "\e[200~")
-                (term-send-string proc initial-input)
-                (term-send-string proc "\e[201~")
-                (term-send-string proc "\r"))))
+              (with-current-buffer existing-buffer
+                (eat-term-send-string eat-terminal "\e[200~")
+                (eat-term-send-string eat-terminal initial-input)
+                (eat-term-send-string eat-terminal "\e[201~")
+                (eat-term-send-string eat-terminal "\r"))))
         ;; Kill stale buffer if process is dead
         (when (and existing-buffer (not (get-buffer-process existing-buffer)))
           (kill-buffer existing-buffer))
         ;; Create new session
-        (let ((proc-buffer (ansi-term "claude" base-name)))
-          (with-current-buffer proc-buffer
-            (pop-to-buffer proc-buffer)
-            ;; HACK: ansi-term sets the process window size before
-            ;; display-buffer-alist moves the buffer to the side window.
-            ;; Without this delay, Claude CLI renders its UI based on the
-            ;; original window dimensions, causing misaligned separators.
-            (run-at-time 0.2 nil
-                         (lambda (buf)
-                           (when-let* ((win (get-buffer-window buf t))
-                                       (proc (get-buffer-process buf)))
-                             (set-process-window-size
-                              proc (window-height win) (window-width win))))
-                         proc-buffer)
+        (let ((buf (eat-make base-name "claude" nil)))
+          (pop-to-buffer buf)
+          (with-current-buffer buf
             (setq-local column-number-mode nil)
-            (setq-local term-buffer-maximum-size 2048)
             (when initial-input
               (run-at-time 1 nil
-                           (lambda (buf input)
-                             (when (buffer-live-p buf)
-                               (let ((proc (get-buffer-process buf)))
-                                 (when proc
-                                   (term-send-string proc "\e[200~")
-                                   (term-send-string proc input)
-                                   (term-send-string proc "\e[201~")
-                                   (term-send-string proc "\r")))))
-                           proc-buffer initial-input)))))))
+                           (lambda (b input)
+                             (when (buffer-live-p b)
+                               (with-current-buffer b
+                                 (eat-term-send-string eat-terminal "\e[200~")
+                                 (eat-term-send-string eat-terminal input)
+                                 (eat-term-send-string eat-terminal "\e[201~")
+                                 (eat-term-send-string eat-terminal "\r"))))
+                           buf initial-input)))))))
 
   (global-set-key (kbd "C-c C-0") #'emacs-kit/claude-chat))
 
