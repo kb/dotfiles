@@ -40,7 +40,8 @@ BRANCH is the new branch name.  TASK is the initial prompt for Claude."
         (unless (zerop (call-process "git" nil nil nil
                                      "worktree" "add" "-b" branch worktree-dir "main"))
           (user-error "Failed to create worktree at %s" worktree-dir)))
-      ;; Switch to new perspective, then set up buffers inside it
+      ;; Register with project.el and switch to new perspective
+      (project-remember-project (project-current nil worktree-dir))
       (persp-switch branch)
       (find-file worktree-dir)
       (emacs-kit/claude-chat)
@@ -130,8 +131,45 @@ Opens a perspective with dired and Claude Code for the selected worktree."
           (emacs-kit/claude-chat)))
       (message "Resumed %d workspaces" (length worktrees))))
 
+  (defun emacs-kit/conductor-delete-workspace (branch)
+    "Delete a conductor workspace: kill perspective, remove worktree, delete branch.
+Prompts for confirmation before proceeding."
+    (interactive
+     (let ((worktrees (emacs-kit/conductor--worktree-dirs)))
+       (unless worktrees
+         (user-error "No worktrees found in ~/.worktrees"))
+       (list (completing-read "Delete workspace: "
+                              (mapcar #'car worktrees) nil t))))
+    (let* ((worktrees (emacs-kit/conductor--worktree-dirs))
+           (worktree-dir (cdr (assoc branch worktrees))))
+      (unless worktree-dir
+        (user-error "Worktree not found: %s" branch))
+      (unless (yes-or-no-p (format "Delete workspace '%s'? (worktree + branch) " branch))
+        (user-error "Aborted"))
+      ;; Remove from project.el
+      (project-forget-project (file-name-as-directory
+                               (abbreviate-file-name worktree-dir)))
+      ;; Kill the perspective if it exists
+      (when (member branch (persp-names))
+        (persp-switch branch)
+        (persp-kill branch))
+      ;; Remove the git worktree
+      (let ((repo-root (with-temp-buffer
+                         (let ((default-directory worktree-dir))
+                           (when (zerop (call-process "git" nil t nil
+                                                      "rev-parse" "--path-format=absolute"
+                                                      "--git-common-dir"))
+                             (file-name-directory
+                              (string-trim (buffer-string))))))))
+        (when repo-root
+          (let ((default-directory repo-root))
+            (call-process "git" nil nil nil "worktree" "remove" "--force" worktree-dir)
+            (call-process "git" nil nil nil "branch" "-D" branch))))
+      (message "Deleted workspace '%s'" branch)))
+
   (global-set-key (kbd "C-c w") #'emacs-kit/conductor-new-workspace)
   (global-set-key (kbd "C-c W") #'emacs-kit/conductor-resume-workspace)
+  (global-set-key (kbd "C-c Q") #'emacs-kit/conductor-delete-workspace)
 
   (with-eval-after-load 'magit-diff
     (define-key magit-diff-mode-map (kbd "C-c C-r") #'emacs-kit/conductor-comment-on-diff))
