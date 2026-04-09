@@ -880,8 +880,11 @@ If ###@### is found, remove it and place point there at the end."
   :ensure t
   :custom
   (persp-mode-prefix-key (kbd "C-x x"))
+  (persp-modestring-short t)
   :init
-  (persp-mode))
+  (persp-mode)
+  :config
+  (setq read-buffer-function 'persp-read-buffer))
 
 
 ;;; │ RCIRC

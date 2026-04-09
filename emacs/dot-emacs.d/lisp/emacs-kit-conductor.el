@@ -85,7 +85,53 @@ BRANCH is the new branch name.  TASK is the initial prompt for Claude."
             (pop-to-buffer buf))
         (user-error "No running Claude session found in %s" claude-buf))))
 
+  (defun emacs-kit/conductor--worktree-dirs ()
+    "Return alist of (BRANCH . DIR) for all worktrees under ~/.worktrees."
+    (let ((base (expand-file-name "~/.worktrees"))
+          results)
+      (when (file-directory-p base)
+        (dolist (repo (directory-files base t "\\`[^.]"))
+          (when (file-directory-p repo)
+            (dolist (branch (directory-files repo t "\\`[^.]"))
+              (when (and (file-directory-p branch)
+                         (file-exists-p (expand-file-name ".git" branch)))
+                (push (cons (file-name-nondirectory branch) branch)
+                      results))))))
+      (nreverse results)))
+
+  (defun emacs-kit/conductor-resume-workspace (branch)
+    "Resume an existing worktree as a conductor workspace.
+Opens a perspective with dired and Claude Code for the selected worktree."
+    (interactive
+     (let ((worktrees (emacs-kit/conductor--worktree-dirs)))
+       (unless worktrees
+         (user-error "No worktrees found in ~/.worktrees"))
+       (list (completing-read "Resume workspace: "
+                              (mapcar #'car worktrees) nil t))))
+    (let* ((worktrees (emacs-kit/conductor--worktree-dirs))
+           (worktree-dir (cdr (assoc branch worktrees))))
+      (unless worktree-dir
+        (user-error "Worktree not found: %s" branch))
+      (persp-switch branch)
+      (find-file worktree-dir)
+      (emacs-kit/claude-chat)))
+
+  (defun emacs-kit/conductor-resume-all ()
+    "Resume all existing worktrees as conductor workspaces."
+    (interactive)
+    (let ((worktrees (emacs-kit/conductor--worktree-dirs)))
+      (unless worktrees
+        (user-error "No worktrees found in ~/.worktrees"))
+      (dolist (wt worktrees)
+        (let ((branch (car wt))
+              (dir (cdr wt)))
+          (persp-switch branch)
+          (find-file dir)
+          (emacs-kit/claude-chat)))
+      (message "Resumed %d workspaces" (length worktrees))))
+
   (global-set-key (kbd "C-c w") #'emacs-kit/conductor-new-workspace)
+  (global-set-key (kbd "C-c W") #'emacs-kit/conductor-resume-workspace)
 
   (with-eval-after-load 'magit-diff
     (define-key magit-diff-mode-map (kbd "C-c C-r") #'emacs-kit/conductor-comment-on-diff))
