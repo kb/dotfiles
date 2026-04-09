@@ -167,9 +167,178 @@ Prompts for confirmation before proceeding."
             (call-process "git" nil nil nil "branch" "-D" branch))))
       (message "Deleted workspace '%s'" branch)))
 
+  ;; --- Agent State ---
+
+  (defvar emacs-kit/conductor--events-file
+    (expand-file-name "~/.claude/agent-control-events.jsonl"))
+
+  (defun emacs-kit/conductor--agent-states ()
+    "Read latest agent state per cwd from the events JSONL file.
+Returns a hash table mapping cwd to the latest state string."
+    (let ((states (make-hash-table :test 'equal)))
+      (when (file-readable-p emacs-kit/conductor--events-file)
+        (with-temp-buffer
+          ;; Read last 200 lines — enough to cover recent state for all sessions
+          (let ((coding-system-for-read 'utf-8))
+            (call-process "tail" nil t nil "-n" "200"
+                          emacs-kit/conductor--events-file))
+          (goto-char (point-min))
+          (while (not (eobp))
+            (let ((line (buffer-substring-no-properties
+                         (line-beginning-position) (line-end-position))))
+              (unless (string-empty-p line)
+                (condition-case nil
+                    (let* ((event (json-parse-string line :object-type 'alist))
+                           (cwd (alist-get 'cwd event))
+                           (transition (alist-get 'state_transition event))
+                           (new-state (alist-get 'new_state transition)))
+                      (when (and cwd new-state)
+                        (puthash cwd new-state states)))
+                  (error nil))))
+            (forward-line 1))))
+      states))
+
+  ;; --- Dashboard ---
+
+  (defvar emacs-kit/conductor-dashboard-mode-map
+    (let ((map (make-sparse-keymap)))
+      (define-key map (kbd "r") #'emacs-kit/conductor-dashboard)
+      (define-key map (kbd "RET") #'emacs-kit/conductor-dashboard-open)
+      (define-key map (kbd "R") #'emacs-kit/conductor-dashboard-resume)
+      (define-key map (kbd "D") #'emacs-kit/conductor-dashboard-delete)
+      map))
+
+  (defvar emacs-kit/conductor--refresh-timer nil)
+  (defvar emacs-kit/conductor--prev-states (make-hash-table :test 'equal))
+  (defvar emacs-kit/conductor--newly-idle nil)
+
+  (define-derived-mode emacs-kit/conductor-dashboard-mode tabulated-list-mode
+    "Conductor"
+    "Major mode for the Conductor workspace dashboard."
+    (setq tabulated-list-format [(" " 2 nil)
+                                 ("Workspace" 30 t)
+                                 ("Repo" 20 t)
+                                 ("Claude" 10 t)
+                                 ("Perspective" 12 t)
+                                 ("Path" 0 t)])
+    (setq tabulated-list-sort-key '("Workspace"))
+    (tabulated-list-init-header)
+    (add-hook 'kill-buffer-hook #'emacs-kit/conductor--stop-refresh nil t))
+
+  (defun emacs-kit/conductor--workspace-entries ()
+    "Build tabulated-list entries for all conductor workspaces."
+    (let ((worktrees (emacs-kit/conductor--worktree-dirs))
+          (active-persps (persp-names))
+          (agent-states (emacs-kit/conductor--agent-states))
+          entries)
+      (dolist (wt worktrees)
+        (let* ((branch (car wt))
+               (dir (cdr wt))
+               (repo (file-name-nondirectory
+                      (directory-file-name (file-name-directory dir))))
+               (claude-buf (format "*claude:%s*" branch))
+               (has-process (and (get-buffer claude-buf)
+                                 (get-buffer-process (get-buffer claude-buf))))
+               (agent-state (gethash dir agent-states))
+               (status (cond
+                        ((not has-process) "off")
+                        ((equal agent-state "running") "working")
+                        ((equal agent-state "waiting_for_input") "idle")
+                        ((equal agent-state "ended") "ended")
+                        (has-process "active")
+                        (t "off")))
+               (persp-status (if (member branch active-persps) "active" ""))
+               (indicator (cond
+                           ((member branch emacs-kit/conductor--newly-idle)
+                            (propertize "\u25cf" 'face '(:foreground "#a6e3a1")))
+                           ((equal status "working")
+                            (propertize "\u25cf" 'face '(:foreground "#f9e2af")))
+                           (t ""))))
+          (push (list branch
+                      (vector indicator branch repo status persp-status
+                              (abbreviate-file-name dir)))
+                entries)))
+      (nreverse entries)))
+
+  (defun emacs-kit/conductor--detect-transitions (entries)
+    "Update newly-idle list based on state transitions in ENTRIES."
+    (dolist (entry entries)
+      (let* ((branch (car entry))
+             (status (aref (cadr entry) 2))
+             (prev (gethash branch emacs-kit/conductor--prev-states)))
+        (when (and (equal status "idle") (equal prev "working"))
+          (cl-pushnew branch emacs-kit/conductor--newly-idle :test #'equal))
+        (puthash branch status emacs-kit/conductor--prev-states))))
+
+  (defun emacs-kit/conductor--clear-at-point ()
+    "Clear the newly-idle indicator for the workspace at point."
+    (when-let* ((branch (tabulated-list-get-id)))
+      (setq emacs-kit/conductor--newly-idle
+            (delete branch emacs-kit/conductor--newly-idle))))
+
+  (defun emacs-kit/conductor--refresh-if-visible ()
+    "Refresh the dashboard if it's visible in a window."
+    (when-let* ((buf (get-buffer "*Conductor*"))
+                ((get-buffer-window buf t)))
+      (with-current-buffer buf
+        (let ((pos (point)))
+          (setq tabulated-list-entries (emacs-kit/conductor--workspace-entries))
+          (emacs-kit/conductor--detect-transitions tabulated-list-entries)
+          (tabulated-list-print t)
+          (goto-char (min pos (point-max)))))))
+
+  (defun emacs-kit/conductor--stop-refresh ()
+    "Stop the dashboard auto-refresh timer."
+    (when emacs-kit/conductor--refresh-timer
+      (cancel-timer emacs-kit/conductor--refresh-timer)
+      (setq emacs-kit/conductor--refresh-timer nil)))
+
+  (defun emacs-kit/conductor-dashboard ()
+    "Open the Conductor workspace dashboard."
+    (interactive)
+    (let ((buf (get-buffer-create "*Conductor*")))
+      (with-current-buffer buf
+        (emacs-kit/conductor-dashboard-mode)
+        (setq tabulated-list-entries (emacs-kit/conductor--workspace-entries))
+        (tabulated-list-print t))
+      (pop-to-buffer buf)
+      ;; Start auto-refresh every 5 seconds
+      (emacs-kit/conductor--stop-refresh)
+      (setq emacs-kit/conductor--refresh-timer
+            (run-with-timer 5 5 #'emacs-kit/conductor--refresh-if-visible))))
+
+  (defun emacs-kit/conductor-dashboard--branch ()
+    "Get the branch name at point in the dashboard."
+    (or (tabulated-list-get-id)
+        (user-error "No workspace at point")))
+
+  (defun emacs-kit/conductor-dashboard-open ()
+    "Switch to the perspective for the workspace at point."
+    (interactive)
+    (emacs-kit/conductor--clear-at-point)
+    (let ((branch (emacs-kit/conductor-dashboard--branch)))
+      (if (member branch (persp-names))
+          (persp-switch branch)
+        (emacs-kit/conductor-resume-workspace branch))))
+
+  (defun emacs-kit/conductor-dashboard-resume ()
+    "Resume the workspace at point."
+    (interactive)
+    (emacs-kit/conductor--clear-at-point)
+    (emacs-kit/conductor-resume-workspace
+     (emacs-kit/conductor-dashboard--branch)))
+
+  (defun emacs-kit/conductor-dashboard-delete ()
+    "Delete the workspace at point."
+    (interactive)
+    (let ((branch (emacs-kit/conductor-dashboard--branch)))
+      (emacs-kit/conductor-delete-workspace branch)
+      (emacs-kit/conductor-dashboard)))
+
   (global-set-key (kbd "C-c w") #'emacs-kit/conductor-new-workspace)
   (global-set-key (kbd "C-c W") #'emacs-kit/conductor-resume-workspace)
   (global-set-key (kbd "C-c Q") #'emacs-kit/conductor-delete-workspace)
+  (global-set-key (kbd "C-c d") #'emacs-kit/conductor-dashboard)
 
   (with-eval-after-load 'magit-diff
     (define-key magit-diff-mode-map (kbd "C-c C-r") #'emacs-kit/conductor-comment-on-diff))
