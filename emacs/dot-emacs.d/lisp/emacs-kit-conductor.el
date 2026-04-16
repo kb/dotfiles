@@ -13,8 +13,9 @@
 
 ;;; Code:
 
-(declare-function vterm-send-string "vterm")
-(declare-function vterm-send-return "vterm")
+(defvar claude-code-executable)
+(declare-function claude-code-run "claude-code-core")
+(declare-function claude-code-send-string "claude-code-core")
 (declare-function magit-current-section "magit-section")
 (declare-function magit-file-at-point "magit-git")
 (declare-function magit-run-git "magit-process")
@@ -24,6 +25,7 @@
   :ensure nil
   :no-require t
   :init
+  (require 'claude-code)
 
   (defun emacs-kit/conductor-new-workspace (branch task)
     "Create an isolated workspace: perspective + git worktree + Claude agent.
@@ -45,18 +47,13 @@ BRANCH is the new branch name.  TASK is the initial prompt for Claude."
       (require 'magit)
       (let ((default-directory worktree-dir))
         (magit-status-setup-buffer worktree-dir))
-      (emacs-kit/claude-chat t)
+      (let ((claude-code-executable "claude --dangerously-skip-permissions"))
+        (claude-code-run))
       (when (and task (not (string-empty-p task)))
-        (run-at-time 2 nil
-                     (lambda (dir input)
-                       (let ((buf (format "*claude:%s*"
-                                         (file-name-nondirectory
-                                          (directory-file-name dir)))))
-                         (when-let* ((b (get-buffer buf)))
-                           (with-current-buffer b
-                             (vterm-send-string input)
-                             (vterm-send-return)))))
-                     worktree-dir task))))
+        (run-at-time 5 nil
+                     (lambda (input)
+                       (claude-code-send-string input))
+                     task))))
 
   (defun emacs-kit/conductor-comment-on-diff ()
     "From a magit diff, send the hunk at point with feedback to Claude."
@@ -70,18 +67,8 @@ BRANCH is the new branch name.  TASK is the initial prompt for Claude."
            (file (magit-file-at-point))
            (feedback (read-string "Feedback: "))
            (message (format "In %s, regarding this change:\n\n```diff\n%s\n```\n\n%s"
-                            (or file "unknown file") hunk-text feedback))
-           (claude-buf (format "*claude:%s*"
-                               (file-name-nondirectory
-                                (directory-file-name (or (vc-root-dir) default-directory))))))
-      (if-let* ((buf (get-buffer claude-buf))
-                ((get-buffer-process buf)))
-          (progn
-            (with-current-buffer buf
-              (vterm-send-string message)
-              (vterm-send-return))
-            (pop-to-buffer buf))
-        (user-error "No running Claude session found in %s" claude-buf))))
+                            (or file "unknown file") hunk-text feedback)))
+      (claude-code-send-string message)))
 
   (defun emacs-kit/conductor--current-worktree-dir ()
     "Return the worktree directory for the current perspective, or nil."
@@ -154,7 +141,9 @@ Opens a perspective with dired and Claude Code for the selected worktree."
       (require 'magit)
       (let ((default-directory worktree-dir))
         (magit-status-setup-buffer worktree-dir))
-      (emacs-kit/claude-chat t)))
+      (let ((default-directory worktree-dir)
+            (claude-code-executable "claude --dangerously-skip-permissions"))
+        (claude-code-run))))
 
   (defun emacs-kit/conductor-resume-all ()
     "Resume all existing worktrees as conductor workspaces."
@@ -169,7 +158,9 @@ Opens a perspective with dired and Claude Code for the selected worktree."
           (persp-switch branch)
           (let ((default-directory dir))
             (magit-status-setup-buffer dir))
-          (emacs-kit/claude-chat t)))
+          (let ((default-directory dir)
+                (claude-code-executable "claude --dangerously-skip-permissions"))
+            (claude-code-run))))
       (message "Resumed %d workspaces" (length worktrees))))
 
   (defun emacs-kit/conductor-delete-workspace (branch)
@@ -396,8 +387,9 @@ Returns a hash table mapping cwd to the latest state string."
     "Open Claude chat in the current workspace's directory."
     (interactive)
     (let ((default-directory (or (emacs-kit/conductor--current-worktree-dir)
-                                 default-directory)))
-      (emacs-kit/claude-chat t)))
+                                 default-directory))
+          (claude-code-executable "claude --dangerously-skip-permissions"))
+      (claude-code-run)))
 
   (defun emacs-kit/conductor-workspace-shell ()
     "Open a shell in the current workspace's directory."
@@ -418,6 +410,20 @@ Returns a hash table mapping cwd to the latest state string."
 
   (require 'transient)
 
+  (defun emacs-kit/conductor-workspace-dired ()
+    "Open dired at the current workspace's root directory."
+    (interactive)
+    (let ((dir (or (emacs-kit/conductor--current-worktree-dir)
+                   default-directory)))
+      (dired dir)))
+
+  (defun emacs-kit/conductor-workspace-project ()
+    "Open project dispatch for the current workspace."
+    (interactive)
+    (let ((default-directory (or (emacs-kit/conductor--current-worktree-dir)
+                                 default-directory)))
+      (project-switch-project default-directory)))
+
   (transient-define-prefix emacs-kit/conductor ()
     "Conductor workspace orchestration."
     ["Workspaces"
@@ -430,9 +436,19 @@ Returns a hash table mapping cwd to the latest state string."
      ("c" "Claude chat" emacs-kit/conductor-workspace-claude)
      ("t" "Shell" emacs-kit/conductor-workspace-shell)
      ("g" "Magit" emacs-kit/conductor-workspace-magit)
-     ("r" "Comment on diff" emacs-kit/conductor-comment-on-diff)])
+     ("f" "Files (dired)" emacs-kit/conductor-workspace-dired)
+     ("p" "Project" emacs-kit/conductor-workspace-project)
+     ("r" "Comment on diff" emacs-kit/conductor-comment-on-diff)]
+    ["Services"
+     ("B" "Bootstrap emulators" emacs-kit/digits-bootstrap)
+     ("S" "Start all services" emacs-kit/digits-start-all)
+     ("G" "Start group" emacs-kit/digits-start-group)
+     ("X" "Stop everything" emacs-kit/digits-stop-everything)
+     ("s" "Switch to service" emacs-kit/digits-switch-to-service)
+     ("R" "Restart service" emacs-kit/digits-restart-service)
+     ("?" "Service status" emacs-kit/digits-service-status)])
 
-  (global-set-key (kbd "C-c c") #'emacs-kit/conductor)
+  (global-set-key (kbd "C-c SPC") #'emacs-kit/conductor)
 
   (with-eval-after-load 'magit-diff
     (define-key magit-diff-mode-map (kbd "C-c C-r") #'emacs-kit/conductor-comment-on-diff))

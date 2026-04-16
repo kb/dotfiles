@@ -15,9 +15,6 @@
 
 ;;; Code:
 
-(defvar vterm-shell)
-(defvar vterm-buffer-name)
-
 (use-package emacs-kit-ai
   :ensure nil
   :no-require t
@@ -67,75 +64,7 @@ If a prompt is provided, it's prepended."
       (let ((buf (eat-make buffer-name "gemini" nil)))
         (pop-to-buffer buf)
         (with-current-buffer buf
-          (setq-local column-number-mode nil)))))
-
-  (defun emacs-kit/claude-chat (&optional dangerously-skip-permissions)
-    "Start or reuse an interactive `claude' session in a `vterm' buffer.
-  If a region is active, prompt for a query and send the region text
-  along with the query to Claude. If a claude buffer for the current
-  project already exists with a live process, reuse it. Otherwise,
-  start a new session.
-  When DANGEROUSLY-SKIP-PERMISSIONS is non-nil, pass that flag to claude."
-    (interactive)
-    (require 'vterm)
-    (let* ((source-file (buffer-file-name))
-           (project-root (vc-root-dir))
-           (default-directory (or project-root
-                                  (and emacs-kit-ai-scratch-path
-                                       (file-directory-p emacs-kit-ai-scratch-path)
-                                       emacs-kit-ai-scratch-path)
-                                  default-directory))
-           (file-ref (when source-file
-                       (if project-root
-                           (file-relative-name source-file project-root)
-                         source-file)))
-           (file-prefix (when file-ref
-                          (format "On file @%s " file-ref)))
-           (region-text (when (use-region-p)
-                          (buffer-substring-no-properties (region-beginning) (region-end))))
-           (query (when region-text
-                    (read-string "Prompt about this region: " file-prefix)))
-           (initial-input (cond
-                           (region-text
-                            (format "%s\n\n```\n%s\n```" query region-text))
-                           (file-prefix
-                            file-prefix)))
-           (base-name (format "claude:%s"
-                              (file-name-nondirectory (directory-file-name default-directory))))
-           (vterm-buffer-name (format "*%s*" base-name))
-           (existing-buffer (get-buffer vterm-buffer-name)))
-      (if (and existing-buffer
-               (buffer-live-p existing-buffer)
-               (get-buffer-process existing-buffer))
-          ;; Reuse existing buffer — just switch and send input
-          (progn
-            (pop-to-buffer existing-buffer)
-            (when initial-input
-              (with-current-buffer existing-buffer
-                (vterm-send-string initial-input)
-                (vterm-send-return))))
-        ;; Kill stale buffer if process is dead
-        (when (and existing-buffer (not (get-buffer-process existing-buffer)))
-          (kill-buffer existing-buffer))
-        ;; Create new session
-        (let* ((vterm-shell (concat "claude"
-                                    (when dangerously-skip-permissions
-                                      " --dangerously-skip-permissions")))
-               (vterm-buffer-name vterm-buffer-name)
-               (buf (vterm vterm-buffer-name)))
-          (pop-to-buffer buf)
-          (with-current-buffer buf
-            (setq-local column-number-mode nil)
-            (when initial-input
-              (run-at-time 1 nil
-                           (lambda (b input)
-                             (when (buffer-live-p b)
-                               (with-current-buffer b
-                                 (vterm-send-string input)
-                                 (vterm-send-return))))
-                           buf initial-input)))))))
-
-  (global-set-key (kbd "C-c C-0") #'emacs-kit/claude-chat))
+          (setq-local column-number-mode nil))))))
 
 (provide 'emacs-kit-ai)
 ;;; emacs-kit-ai.el ends here

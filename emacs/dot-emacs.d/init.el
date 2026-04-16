@@ -1420,6 +1420,12 @@ Ex: mpv file1 file2 file3 file4..."
 (use-package vterm
   :ensure t)
 
+(use-package claude-code
+  :ensure t
+  :custom
+  (claude-code-terminal-backend 'vterm)
+  (claude-code-enable-notifications t))
+
 
 ;;; │ ESHELL
 (use-package eshell
@@ -1856,6 +1862,10 @@ For the current icon style."
 
 
 ;;; │ MAGIT
+(use-package transient
+  :ensure t
+  :pin "melpa")
+
 (use-package magit
   :ensure t
   :bind ("C-x g" . magit-status))
@@ -3220,6 +3230,7 @@ As seen on: https://www.reddit.com/r/emacs/comments/1kfblch/need_help_with_addin
 (require 'emacs-kit-erc-image)
 (require 'emacs-kit-yt)
 (require 'emacs-kit-gh)
+(require 'emacs-kit-digits)
 (require 'emacs-kit-conductor)
 (provide 'init)
 ;;; └ init.el ends here
