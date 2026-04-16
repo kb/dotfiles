@@ -9,10 +9,14 @@
 ;;; Commentary:
 ;;
 ;; Provides interactive functions to launch AI chat sessions
-;; (Ollama, Gemini, Claude) inside `eat' buffers.  Supports
-;; sending selected regions as context.
+;; (Ollama, Gemini, Claude).  Claude uses `vterm' buffers for
+;; robust TUI rendering.  Ollama and Gemini use `eat'.
+;; Supports sending selected regions as context.
 
 ;;; Code:
+
+(defvar vterm-shell)
+(defvar vterm-buffer-name)
 
 (use-package emacs-kit-ai
   :ensure nil
@@ -65,13 +69,15 @@ If a prompt is provided, it's prepended."
         (with-current-buffer buf
           (setq-local column-number-mode nil)))))
 
-  (defun emacs-kit/claude-chat ()
-    "Start or reuse an interactive `claude' session in an `eat' buffer.
+  (defun emacs-kit/claude-chat (&optional dangerously-skip-permissions)
+    "Start or reuse an interactive `claude' session in a `vterm' buffer.
   If a region is active, prompt for a query and send the region text
   along with the query to Claude. If a claude buffer for the current
   project already exists with a live process, reuse it. Otherwise,
-  start a new session."
+  start a new session.
+  When DANGEROUSLY-SKIP-PERMISSIONS is non-nil, pass that flag to claude."
     (interactive)
+    (require 'vterm)
     (let* ((source-file (buffer-file-name))
            (project-root (vc-root-dir))
            (default-directory (or project-root
@@ -96,8 +102,8 @@ If a prompt is provided, it's prepended."
                             file-prefix)))
            (base-name (format "claude:%s"
                               (file-name-nondirectory (directory-file-name default-directory))))
-           (eat-buffer-name (format "*%s*" base-name))
-           (existing-buffer (get-buffer eat-buffer-name)))
+           (vterm-buffer-name (format "*%s*" base-name))
+           (existing-buffer (get-buffer vterm-buffer-name)))
       (if (and existing-buffer
                (buffer-live-p existing-buffer)
                (get-buffer-process existing-buffer))
@@ -106,15 +112,17 @@ If a prompt is provided, it's prepended."
             (pop-to-buffer existing-buffer)
             (when initial-input
               (with-current-buffer existing-buffer
-                (eat-term-send-string eat-terminal "\e[200~")
-                (eat-term-send-string eat-terminal initial-input)
-                (eat-term-send-string eat-terminal "\e[201~")
-                (eat-term-send-string eat-terminal "\r"))))
+                (vterm-send-string initial-input)
+                (vterm-send-return))))
         ;; Kill stale buffer if process is dead
         (when (and existing-buffer (not (get-buffer-process existing-buffer)))
           (kill-buffer existing-buffer))
         ;; Create new session
-        (let ((buf (eat-make base-name "claude" nil)))
+        (let* ((vterm-shell (concat "claude"
+                                    (when dangerously-skip-permissions
+                                      " --dangerously-skip-permissions")))
+               (vterm-buffer-name vterm-buffer-name)
+               (buf (vterm vterm-buffer-name)))
           (pop-to-buffer buf)
           (with-current-buffer buf
             (setq-local column-number-mode nil)
@@ -123,10 +131,8 @@ If a prompt is provided, it's prepended."
                            (lambda (b input)
                              (when (buffer-live-p b)
                                (with-current-buffer b
-                                 (eat-term-send-string eat-terminal "\e[200~")
-                                 (eat-term-send-string eat-terminal input)
-                                 (eat-term-send-string eat-terminal "\e[201~")
-                                 (eat-term-send-string eat-terminal "\r"))))
+                                 (vterm-send-string input)
+                                 (vterm-send-return))))
                            buf initial-input)))))))
 
   (global-set-key (kbd "C-c C-0") #'emacs-kit/claude-chat))

@@ -1413,6 +1413,11 @@ Ex: mpv file1 file2 file3 file4..."
 
 ;;; │ EAT
 (use-package eat
+  :ensure t
+  :custom
+  (eat-enable-auto-line-mode t))
+
+(use-package vterm
   :ensure t)
 
 

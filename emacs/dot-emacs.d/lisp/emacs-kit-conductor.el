@@ -13,9 +13,8 @@
 
 ;;; Code:
 
-(defvar eat-terminal)
-(declare-function eat-term-send-string "eat")
-(declare-function eat-make "eat")
+(declare-function vterm-send-string "vterm")
+(declare-function vterm-send-return "vterm")
 (declare-function magit-current-section "magit-section")
 (declare-function magit-file-at-point "magit-git")
 (declare-function magit-run-git "magit-process")
@@ -43,8 +42,10 @@ BRANCH is the new branch name.  TASK is the initial prompt for Claude."
       ;; Register with project.el and switch to new perspective
       (project-remember-project (project-current nil worktree-dir))
       (persp-switch branch)
-      (find-file worktree-dir)
-      (emacs-kit/claude-chat)
+      (require 'magit)
+      (let ((default-directory worktree-dir))
+        (magit-status-setup-buffer worktree-dir))
+      (emacs-kit/claude-chat t)
       (when (and task (not (string-empty-p task)))
         (run-at-time 2 nil
                      (lambda (dir input)
@@ -53,10 +54,8 @@ BRANCH is the new branch name.  TASK is the initial prompt for Claude."
                                           (directory-file-name dir)))))
                          (when-let* ((b (get-buffer buf)))
                            (with-current-buffer b
-                             (eat-term-send-string eat-terminal "\e[200~")
-                             (eat-term-send-string eat-terminal input)
-                             (eat-term-send-string eat-terminal "\e[201~")
-                             (eat-term-send-string eat-terminal "\r")))))
+                             (vterm-send-string input)
+                             (vterm-send-return)))))
                      worktree-dir task))))
 
   (defun emacs-kit/conductor-comment-on-diff ()
@@ -79,25 +78,63 @@ BRANCH is the new branch name.  TASK is the initial prompt for Claude."
                 ((get-buffer-process buf)))
           (progn
             (with-current-buffer buf
-              (eat-term-send-string eat-terminal "\e[200~")
-              (eat-term-send-string eat-terminal message)
-              (eat-term-send-string eat-terminal "\e[201~")
-              (eat-term-send-string eat-terminal "\r"))
+              (vterm-send-string message)
+              (vterm-send-return))
             (pop-to-buffer buf))
         (user-error "No running Claude session found in %s" claude-buf))))
 
+  (defun emacs-kit/conductor--current-worktree-dir ()
+    "Return the worktree directory for the current perspective, or nil."
+    (let ((persp (persp-current-name)))
+      (cdr (assoc persp (emacs-kit/conductor--worktree-dirs)))))
+
+  (defun emacs-kit/conductor--find-worktree-in (dir)
+    "Find the first git worktree directory under DIR."
+    (catch 'found
+      (dolist (entry (directory-files dir t "\\`[^.]"))
+        (when (file-directory-p entry)
+          (if (file-exists-p (expand-file-name ".git" entry))
+              (throw 'found entry)
+            ;; Check one level deeper for slash-branched worktrees
+            (dolist (sub (directory-files entry t "\\`[^.]"))
+              (when (and (file-directory-p sub)
+                         (file-exists-p (expand-file-name ".git" sub)))
+                (throw 'found sub))))))))
+
   (defun emacs-kit/conductor--worktree-dirs ()
-    "Return alist of (BRANCH . DIR) for all worktrees under ~/.worktrees."
-    (let ((base (expand-file-name "~/.worktrees"))
+    "Return alist of (BRANCH . DIR) for all worktrees under ~/.worktrees.
+Uses `git worktree list' to find worktrees, filtering to those in ~/.worktrees."
+    (let ((base (expand-file-name "~/.worktrees/"))
           results)
       (when (file-directory-p base)
-        (dolist (repo (directory-files base t "\\`[^.]"))
-          (when (file-directory-p repo)
-            (dolist (branch (directory-files repo t "\\`[^.]"))
-              (when (and (file-directory-p branch)
-                         (file-exists-p (expand-file-name ".git" branch)))
-                (push (cons (file-name-nondirectory branch) branch)
-                      results))))))
+        (dolist (repo-dir (directory-files base t "\\`[^.]"))
+          (when (file-directory-p repo-dir)
+            ;; Find any worktree to run git from
+            (when-let* ((sample-wt (emacs-kit/conductor--find-worktree-in repo-dir)))
+              (with-temp-buffer
+                (let ((default-directory sample-wt))
+                  (when (zerop (call-process "git" nil t nil
+                                             "worktree" "list" "--porcelain"))
+                    (goto-char (point-min))
+                    (let (wt-path wt-branch)
+                      (while (not (eobp))
+                        (let ((line (buffer-substring-no-properties
+                                     (line-beginning-position) (line-end-position))))
+                          (cond
+                           ((string-prefix-p "worktree " line)
+                            (setq wt-path (substring line 9)))
+                           ((string-prefix-p "branch refs/heads/" line)
+                            (setq wt-branch (substring line 18)))
+                           ((string-empty-p line)
+                            (when (and wt-path wt-branch
+                                       (string-prefix-p base wt-path))
+                              (push (cons wt-branch wt-path) results))
+                            (setq wt-path nil wt-branch nil))))
+                        (forward-line 1))
+                      ;; Handle last entry if no trailing blank line
+                      (when (and wt-path wt-branch
+                                 (string-prefix-p base wt-path))
+                        (push (cons wt-branch wt-path) results))))))))))
       (nreverse results)))
 
   (defun emacs-kit/conductor-resume-workspace (branch)
@@ -114,12 +151,15 @@ Opens a perspective with dired and Claude Code for the selected worktree."
       (unless worktree-dir
         (user-error "Worktree not found: %s" branch))
       (persp-switch branch)
-      (find-file worktree-dir)
-      (emacs-kit/claude-chat)))
+      (require 'magit)
+      (let ((default-directory worktree-dir))
+        (magit-status-setup-buffer worktree-dir))
+      (emacs-kit/claude-chat t)))
 
   (defun emacs-kit/conductor-resume-all ()
     "Resume all existing worktrees as conductor workspaces."
     (interactive)
+    (require 'magit)
     (let ((worktrees (emacs-kit/conductor--worktree-dirs)))
       (unless worktrees
         (user-error "No worktrees found in ~/.worktrees"))
@@ -127,8 +167,9 @@ Opens a perspective with dired and Claude Code for the selected worktree."
         (let ((branch (car wt))
               (dir (cdr wt)))
           (persp-switch branch)
-          (find-file dir)
-          (emacs-kit/claude-chat)))
+          (let ((default-directory dir))
+            (magit-status-setup-buffer dir))
+          (emacs-kit/claude-chat t)))
       (message "Resumed %d workspaces" (length worktrees))))
 
   (defun emacs-kit/conductor-delete-workspace (branch)
@@ -151,7 +192,7 @@ Prompts for confirmation before proceeding."
                                (abbreviate-file-name worktree-dir)))
       ;; Kill the perspective if it exists
       (when (member branch (persp-names))
-        (persp-switch branch)
+        (persp-switch "main")
         (persp-kill branch))
       ;; Remove the git worktree
       (let ((repo-root (with-temp-buffer
@@ -241,7 +282,6 @@ Returns a hash table mapping cwd to the latest state string."
                                  (get-buffer-process (get-buffer claude-buf))))
                (agent-state (gethash dir agent-states))
                (status (cond
-                        ((not has-process) "off")
                         ((equal agent-state "running") "working")
                         ((equal agent-state "waiting_for_input") "idle")
                         ((equal agent-state "ended") "ended")
@@ -335,10 +375,64 @@ Returns a hash table mapping cwd to the latest state string."
       (emacs-kit/conductor-delete-workspace branch)
       (emacs-kit/conductor-dashboard)))
 
-  (global-set-key (kbd "C-c w") #'emacs-kit/conductor-new-workspace)
-  (global-set-key (kbd "C-c W") #'emacs-kit/conductor-resume-workspace)
-  (global-set-key (kbd "C-c Q") #'emacs-kit/conductor-delete-workspace)
-  (global-set-key (kbd "C-c d") #'emacs-kit/conductor-dashboard)
+  (defun emacs-kit/conductor-shell ()
+    "Open a vterm shell in the current workspace's worktree directory."
+    (interactive)
+    (require 'vterm)
+    (let* ((dir (or (vc-root-dir) default-directory))
+           (name (file-name-nondirectory (directory-file-name dir)))
+           (vterm-buffer-name (format "*shell:%s*" name))
+           (existing (get-buffer vterm-buffer-name)))
+      (if (and existing (get-buffer-process existing))
+          (pop-to-buffer existing)
+        (when (and existing (not (get-buffer-process existing)))
+          (kill-buffer existing))
+        (let ((default-directory dir))
+          (vterm vterm-buffer-name)))))
+
+  ;; --- Workspace-aware wrappers ---
+
+  (defun emacs-kit/conductor-workspace-claude ()
+    "Open Claude chat in the current workspace's directory."
+    (interactive)
+    (let ((default-directory (or (emacs-kit/conductor--current-worktree-dir)
+                                 default-directory)))
+      (emacs-kit/claude-chat t)))
+
+  (defun emacs-kit/conductor-workspace-shell ()
+    "Open a shell in the current workspace's directory."
+    (interactive)
+    (let ((default-directory (or (emacs-kit/conductor--current-worktree-dir)
+                                 default-directory)))
+      (emacs-kit/conductor-shell)))
+
+  (defun emacs-kit/conductor-workspace-magit ()
+    "Open magit in the current workspace's directory."
+    (interactive)
+    (require 'magit)
+    (let* ((dir (or (emacs-kit/conductor--current-worktree-dir)
+                    default-directory)))
+      (magit-status-setup-buffer dir)))
+
+  ;; --- Transient Menu ---
+
+  (require 'transient)
+
+  (transient-define-prefix emacs-kit/conductor ()
+    "Conductor workspace orchestration."
+    ["Workspaces"
+     ("w" "New workspace" emacs-kit/conductor-new-workspace)
+     ("W" "Resume workspace" emacs-kit/conductor-resume-workspace)
+     ("a" "Resume all" emacs-kit/conductor-resume-all)
+     ("d" "Dashboard" emacs-kit/conductor-dashboard)
+     ("Q" "Delete workspace" emacs-kit/conductor-delete-workspace)]
+    ["Current workspace"
+     ("c" "Claude chat" emacs-kit/conductor-workspace-claude)
+     ("t" "Shell" emacs-kit/conductor-workspace-shell)
+     ("g" "Magit" emacs-kit/conductor-workspace-magit)
+     ("r" "Comment on diff" emacs-kit/conductor-comment-on-diff)])
+
+  (global-set-key (kbd "C-c c") #'emacs-kit/conductor)
 
   (with-eval-after-load 'magit-diff
     (define-key magit-diff-mode-map (kbd "C-c C-r") #'emacs-kit/conductor-comment-on-diff))
