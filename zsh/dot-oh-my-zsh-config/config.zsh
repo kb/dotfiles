@@ -19,7 +19,8 @@ path+=("${HOME}/Library/Python/3.9/bin")
 export GCP_ACCOUNT_EMAIL="kyle@digits.com"
 
 # Always have make for core repo run view gen
-export MAKE_AIB=true+
+export MAKE_AIB=true
+export SEED_STRIPE=true
 
 # Digits development tools
 export PATH="/Users/kyle/digits/core/development/bin:$PATH"
