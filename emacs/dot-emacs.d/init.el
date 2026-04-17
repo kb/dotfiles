@@ -184,6 +184,12 @@ for ESLint."
 (add-to-list 'package-archives '("melpa" . "https://melpa.org/packages/") t)
 (package-initialize)
 
+;;; ├──────────────────── macOS MODIFIER KEYS
+(setq mac-command-modifier 'super)
+(setq mac-option-modifier 'meta)
+(setq ns-command-modifier 'super)
+(setq ns-alternate-modifier 'meta)
+
 ;;; ├──────────────────── GENERAL EMACS CONFIG
 ;;; │ EMACS
 (use-package emacs
@@ -202,6 +208,7 @@ for ESLint."
    ("C-x w f v"  . window-layout-flip-topdown)       ; EMACS-31
    ("C-x 5 l"  . select-frame-by-name)
    ("C-x 5 s"  . set-frame-name)
+   ("s-v" . yank)
    ("RET" . newline-and-indent)
    ("C-z" . nil)
    ("C-x C-z" . nil)
@@ -334,6 +341,7 @@ for ESLint."
 
   ;; Fix archaic defaults
   (setopt sentence-end-double-space nil)
+  (setq-default indent-tabs-mode nil)
 
   ;; Save manual customizations to other file than init.el
   (setq custom-file (locate-user-emacs-file "custom-vars.el"))
@@ -387,8 +395,7 @@ for ESLint."
 
   ;; MacOS specific customizations
   (when (eq system-type 'darwin)
-    (setq insert-directory-program "gls")
-    (setq mac-command-modifier 'meta))
+    (setq insert-directory-program "gls"))
 
   ;; We want auto-save, but no #file# cluterring, so everything goes under our config cache/
   (make-directory (expand-file-name "cache/auto-saves/" user-emacs-directory) t)

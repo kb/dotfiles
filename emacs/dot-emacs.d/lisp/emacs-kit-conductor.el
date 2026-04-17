@@ -27,8 +27,24 @@
   :init
   (require 'claude-code)
 
+  (defun emacs-kit/conductor--setup-workspace (worktree-dir branch task)
+    "Common setup for a conductor workspace.
+Opens perspective, magit, Claude, and optionally sends TASK."
+    (project-remember-project (project-current nil worktree-dir))
+    (persp-switch branch)
+    (require 'magit)
+    (let ((default-directory worktree-dir))
+      (magit-status-setup-buffer worktree-dir))
+    (let ((claude-code-executable "claude --dangerously-skip-permissions"))
+      (claude-code-run))
+    (when (and task (not (string-empty-p task)))
+      (run-at-time 5 nil
+                   (lambda (input)
+                     (claude-code-send-string input))
+                   task)))
+
   (defun emacs-kit/conductor-new-workspace (branch task)
-    "Create an isolated workspace: perspective + git worktree + Claude agent.
+    "Create an isolated workspace from a new branch off main.
 BRANCH is the new branch name.  TASK is the initial prompt for Claude."
     (interactive "sBranch name: \nsTask description: ")
     (let* ((repo-root (or (vc-root-dir)
@@ -36,27 +52,40 @@ BRANCH is the new branch name.  TASK is the initial prompt for Claude."
            (repo-name (file-name-nondirectory (directory-file-name repo-root)))
            (worktree-dir (expand-file-name
                           (format "~/.worktrees/%s/%s" repo-name branch))))
-      ;; Create worktree via git directly to avoid magit side effects
       (let ((default-directory repo-root))
         (unless (zerop (call-process "git" nil nil nil
                                      "worktree" "add" "-b" branch worktree-dir "main"))
           (user-error "Failed to create worktree at %s" worktree-dir)))
-      ;; Register with project.el and switch to new perspective
-      (project-remember-project (project-current nil worktree-dir))
-      (persp-switch branch)
-      (require 'magit)
-      (let ((default-directory worktree-dir))
-        (magit-status-setup-buffer worktree-dir))
-      (let ((claude-code-executable "claude --dangerously-skip-permissions"))
-        (claude-code-run))
-      (when (and task (not (string-empty-p task)))
-        (run-at-time 5 nil
-                     (lambda (input)
-                       (claude-code-send-string input))
-                     task))))
+      (emacs-kit/conductor--setup-workspace worktree-dir branch task)))
+
+  (defun emacs-kit/conductor-open-branch (branch task)
+    "Create a workspace from an existing branch.
+BRANCH is an existing branch name.  TASK is the initial prompt for Claude."
+    (interactive
+     (let* ((repo-root (or (vc-root-dir)
+                           (user-error "Not in a git repository")))
+            (default-directory repo-root)
+            (branches (split-string
+                       (shell-command-to-string
+                        "git branch --format='%(refname:short)' --sort=-committerdate")
+                       "\n" t)))
+       (list (completing-read "Branch: " branches nil t)
+             (read-string "Task description: "))))
+    (let* ((repo-root (or (vc-root-dir)
+                          (user-error "Not in a git repository")))
+           (repo-name (file-name-nondirectory (directory-file-name repo-root)))
+           (worktree-dir (expand-file-name
+                          (format "~/.worktrees/%s/%s" repo-name branch))))
+      (let ((default-directory repo-root))
+        (unless (zerop (call-process "git" nil nil nil
+                                     "worktree" "add" worktree-dir branch))
+          (user-error "Failed to create worktree for branch %s" branch)))
+      (emacs-kit/conductor--setup-workspace worktree-dir branch task)))
 
   (defun emacs-kit/conductor-comment-on-diff ()
-    "From a magit diff, send the hunk at point with feedback to Claude."
+    "From a magit diff, send the hunk at point with feedback to Claude.
+If a region is active, send only the selected lines with the full
+hunk as context."
     (interactive)
     (unless (derived-mode-p 'magit-diff-mode 'magit-status-mode)
       (user-error "Not in a magit diff buffer"))
@@ -64,10 +93,16 @@ BRANCH is the new branch name.  TASK is the initial prompt for Claude."
            (hunk-text (when section
                         (buffer-substring-no-properties
                          (oref section start) (oref section end))))
+           (selection (when (use-region-p)
+                        (buffer-substring-no-properties
+                         (region-beginning) (region-end))))
            (file (magit-file-at-point))
            (feedback (read-string "Feedback: "))
-           (message (format "In %s, regarding this change:\n\n```diff\n%s\n```\n\n%s"
-                            (or file "unknown file") hunk-text feedback)))
+           (message (if selection
+                        (format "In %s, regarding these specific lines:\n\n```diff\n%s\n```\n\nFull hunk for context:\n\n```diff\n%s\n```\n\n%s"
+                                (or file "unknown file") selection hunk-text feedback)
+                      (format "In %s, regarding this change:\n\n```diff\n%s\n```\n\n%s"
+                              (or file "unknown file") hunk-text feedback))))
       (claude-code-send-string message)))
 
   (defun emacs-kit/conductor--current-worktree-dir ()
@@ -428,6 +463,7 @@ Returns a hash table mapping cwd to the latest state string."
     "Conductor workspace orchestration."
     ["Workspaces"
      ("w" "New workspace" emacs-kit/conductor-new-workspace)
+     ("b" "From existing branch" emacs-kit/conductor-open-branch)
      ("W" "Resume workspace" emacs-kit/conductor-resume-workspace)
      ("a" "Resume all" emacs-kit/conductor-resume-all)
      ("d" "Dashboard" emacs-kit/conductor-dashboard)
