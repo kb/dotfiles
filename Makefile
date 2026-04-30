@@ -18,7 +18,7 @@ brew-stow:
 brew-bundle: stow-homebrew
 	@$(BREW) bundle --file homebrew/Brewfile
 
-stow: stow-scripts stow-zsh stow-ssh stow-git stow-1pw stow-homebrew stow-emacs
+stow: stow-scripts stow-zsh stow-ssh stow-git stow-1pw stow-homebrew
 	@echo "All dotfiles have been stowed"
 
 stow-zsh:
@@ -43,9 +43,6 @@ stow-1pw:
 
 stow-homebrew:
 	$(STOW) homebrew
-
-stow-emacs:
-	$(STOW) emacs --dotfiles
 
 stow-scripts:
 	$(STOW) scripts --dotfiles

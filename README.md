@@ -13,7 +13,6 @@ This dotfiles repository is organized by application or tool, with each director
 - [GNU Stow](https://www.gnu.org/software/stow/)
 - [Oh My Zsh](https://ohmyz.sh/)
 - [1Password](https://1password.com/) (Passwords, ssh keys, and git commit signing)
-- [Emacs 30+](https://www.gnu.org/software/emacs/)
 
 ## Installation
 
@@ -79,14 +78,12 @@ You can also stow individual configurations:
 ```bash
 make stow-zsh
 make stow-git
-make stow-emacs
 # etc.
 ```
 
 ## Directory Structure
 
 - **1password/**: 1Password configuration
-- **emacs/**: Emacs configuration based on Emacs Bedrock
 - **git/**: Git configuration with 1Password integration for commit signing
 - **homebrew/**: Brewfile for managing packages and applications
 - **scripts/**: Custom utility scripts
@@ -116,18 +113,6 @@ The Git configuration includes:
 - GitHub username
 - Pull behavior (merge, not rebase)
 - Default branch name (main)
-
-### Emacs
-
-The Emacs configuration is based on Emacs Bedrock, a minimal but comprehensive Emacs configuration. It includes:
-
-- Basic settings for a better user experience
-- Discovery aids like which-key
-- Minibuffer/completion settings
-- Interface enhancements
-- Tab-bar configuration
-- Dark theme (modus-vivendi)
-- Development tools configuration (tree-sitter, Magit, language modes, Eglot)
 
 ### Scripts
 
@@ -165,7 +150,7 @@ stow-newapp:
 4. Update the `stow` target in the Makefile to include your new target:
 
 ```makefile
-stow: stow-scripts stow-zsh stow-ssh stow-git stow-1pw stow-homebrew stow-emacs stow-newapp
+stow: stow-scripts stow-zsh stow-ssh stow-git stow-1pw stow-homebrew stow-newapp
 	@echo "All dotfiles have been stowed"
 ```
 
